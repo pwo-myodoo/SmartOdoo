@@ -18,6 +18,9 @@ fi
 # install debugpy package for debugging
 pip3 install debugpy
 
+#install coveragepy
+pip3 install coverage
+
 # sed -i 's|raise werkzeug.exceptions.BadRequest(msg)|self.jsonrequest = {}|g' /usr/lib/python3/dist-packages/odoo/http.py
 
 DB_ARGS=()

@@ -18,6 +18,8 @@ param(
     [Alias('d', 'delete')] [switch] $DELETE_PROJECT,
     
     [Alias('t', 'test')] [switch] $RUN_TEST,
+	
+	[Alias('c', 'coverage')] [switch] $RUN_COV,
 
     [Alias('m', 'module')] $TEST_MODULE,
 
@@ -149,6 +151,26 @@ function run_unit_tests {
     }
 }
 
+function run_unit_tests_with_coverage {
+    $location = Get-Location
+    if ( $null -eq $TEST_DB -or $TEST_DB -eq "" )
+    {
+        Write-Output "You need to specify database to run tests on. Use --db."
+        display_help
+    }
+    if ( $null -ne $TEST_MODULE )
+    {
+        Write-Output "START ODOO UNIT TESTS ON ($TEST_DB) DB FOR ($TEST_MODULE) MODULE"
+        Set-Location $PROJECT_FULLPATH; docker-compose run --rm web ls -la; ./var/lib/odoo/.local/bin/coverage run odoo-bin --test-enable --log-level=test --stop-after-init -d $TEST_DB -i $TEST_MODULE
+        Set-Location $location
+    }
+    else
+    {
+        Write-Output "You need to specify module or tags. Use -m or --tags"
+        display_help
+    }
+}
+
 function project_exist {
     if ( $DELETE_PROJECT )
     {
@@ -158,6 +180,10 @@ function project_exist {
     elseif ( $RUN_TEST )
     {
         run_unit_tests
+    }
+	elseif ( $RUN_COV )
+    {
+        run_unit_tests_with_coverage
     }
     else
     {
@@ -320,6 +346,7 @@ function display_help {
     Write-Output "-e, -enterprise                    Set for install enterprise modules"
     Write-Output "-d, -delete                        Delete project if exist"
     Write-Output "-t, -test                          Run tests."
+	Write-Output "-c, -coverage                      Run coverage."
     Write-Output "-m, -module                   (N)  Module to test"
     Write-Output "    -tags                     (N)  Tags to test"
     Write-Output "    -database                 (N)  Database to test on"
