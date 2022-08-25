@@ -27,6 +27,8 @@ param(
 
     [Alias('tags')] $TEST_TAGS,
 
+    [Alias('all')] $COV_ALL,
+
     [Alias('h', 'help')] [switch] $display_help
 
 )
@@ -155,18 +157,44 @@ function run_unit_tests_with_coverage {
     $location = Get-Location
     if ( $null -eq $TEST_DB -or $TEST_DB -eq "" )
     {
-        Write-Output "You need to specify database to run tests on. Use --db."
+        Write-Output "You need to specify database to run tests on. Use --db or -database."
         display_help
     }
-    if ( $null -ne $TEST_MODULE )
+    if ( $null -ne $TEST_MODULE -and $null -eq $COV_ALL )
     {
-        Write-Output "START ODOO UNIT TESTS ON ($TEST_DB) DB FOR ($TEST_MODULE) MODULE"
-        Set-Location $PROJECT_FULLPATH; docker-compose run --rm web ls -la; ./var/lib/odoo/.local/bin/coverage run odoo-bin --test-enable --log-level=test --stop-after-init -d $TEST_DB -i $TEST_MODULE
+        Write-Output "START COVERAGE REPORT ON ($TEST_DB) DB FOR ($TEST_MODULE) MODULE"
+        Set-Location $PROJECT_FULLPATH; docker-compose run -d --name="cov_test" --rm web 
+@"
+        ./entrypoint.sh;
+        coverage run --source=/mnt/extra-addons/$TEST_MODULE --data-file=.coverage_temp /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d $TEST_DB --test-enable -i $TEST_MODULE --stop-after-init --log-level=test;
+        coverage report --data-file=.coverage_temp;
+        coverage xml --data-file=.coverage_temp -o /mnt/extra-addons/$TEST_MODULE/coverage/coverage-xml.xml;
+        coverage report --data-file=.coverage_temp > /mnt/extra-addons/$TEST_MODULE/coverage/coverage.txt;
+"@ | docker exec -i -u root cov_test sh
+        Set-Location $PROJECT_FULLPATH; docker cp cov_test:/mnt/extra-addons/$TEST_MODULE/coverage/ ${PROJECT_FULLPATH}/addons/$TEST_MODULE
+        Set-Location $PROJECT_FULLPATH; docker-compose stop web
+        Set-Location $PROJECT_FULLPATH; docker-compose start web
+        Set-Location $location
+    }
+    elseif ( $null -ne $TEST_MODULE -and $null -ne $COV_ALL )
+    {
+        Write-Output "START COVERAGE REPORT FOR ALL CUSTOM MODULES ON ($TEST_DB) DB"
+        Set-Location $PROJECT_FULLPATH; docker-compose run -d --name="cov_test" --rm  web 
+@"
+        ./entrypoint.sh;
+        coverage run --source=/mnt/extra-addons --data-file=.coverage_temp /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d $TEST_DB --test-enable -i $TEST_MODULE --stop-after-init --log-level=test;
+        coverage report --data-file=.coverage_temp;
+        coverage xml --data-file=.coverage_temp -o /mnt/extra-addons/coverage-all/coverage-xml.xml;
+"@ | docker exec -i -u root cov_test sh
+        Set-Location $PROJECT_FULLPATH; docker cp cov_test:/mnt/extra-addons/coverage-all  ${PROJECT_FULLPATH}/addons
+        Set-Location $PROJECT_FULLPATH; docker-compose stop web
+        Set-Location $PROJECT_FULLPATH; docker-compose start web
         Set-Location $location
     }
     else
     {
-        Write-Output "You need to specify module or tags. Use -m or --tags"
+        Write-Output "You need to specify module and all, or module. Use -m or -all."
+        Write-Output "To properlly use all flag try -all T"
         display_help
     }
 }
@@ -196,6 +224,7 @@ function create_project {
     Copy-Item .\config\* -Destination $PROJECT_FULLPATH\config\ -Recurse
     Copy-Item .\docker-compose.yml -Destination $PROJECT_FULLPATH\ -Recurse
     Copy-Item .\entrypoint.sh -Destination $PROJECT_FULLPATH\ -Recurse
+    Copy-Item .\.coveragerc -Destination $PROJECT_FULLPATH\ -Recurse
     # Change CRLF to LF
     (Get-Content "$PROJECT_FULLPATH\entrypoint.sh" -Raw) -replace "`r`n", "`n" | Set-Content "$PROJECT_FULLPATH\entrypoint.sh" -Force
     Copy-Item .\launch.json -Destination $PROJECT_FULLPATH\.vscode\ -Recurse
@@ -349,6 +378,7 @@ function display_help {
 	Write-Output "-c, -coverage                      Run coverage."
     Write-Output "-m, -module                   (N)  Module to test"
     Write-Output "    -tags                     (N)  Tags to test"
+    Write-Output "    -all                      (N)  Coverage report for all custom modules"
     Write-Output "    -database                 (N)  Database to test on"
 
     # echo some stuff here for the -a or --add-options

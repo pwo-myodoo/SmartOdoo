@@ -15,6 +15,7 @@ services:
     tty: true
     volumes:
       - ${PROJECT_LOCATION}/entrypoint.sh:/entrypoint.sh
+      - ${PROJECT_LOCATION}/.coveragerc:/.coveragerc
       - ${PROJECT_LOCATION}/config:/etc/odoo
       - ${PROJECT_LOCATION}/addons:/mnt/extra-addons
       - ${PROJECT_LOCATION}/enterprise:/mnt/enterprise
