@@ -106,6 +106,43 @@ run_unit_tests(){
     fi
 }
 
+run_unit_tests_with_coverage(){
+    if [ -z TEST_DB ] || [ "$TEST_DB" == "" ]; then
+        echo "You need to specify database to run tests on. Use --db."
+        display_help
+    fi
+    if [ -v TEST_MODULE ] && [ -z COV_ALL ]; then
+        echo "START COVERAGE REPORT ON ($TEST_DB) DB FOR ($TEST_MODULE) MODULE"
+        (cd $PROJECT_FULLPATH; docker-compose run -d --name="cov_test" --rm web)
+        docker exec -i -u root cov_test sh <<-EOF
+        ./entrypoint.sh;
+        coverage run --source=/mnt/extra-addons/$TEST_MODULE --data-file=.coverage_temp /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d $TEST_DB --test-enable -i $TEST_MODULE --stop-after-init --log-level=test;
+        coverage report --data-file=.coverage_temp;
+        coverage xml --data-file=.coverage_temp -o /mnt/extra-addons/$TEST_MODULE/coverage/coverage-xml.xml;
+        coverage report --data-file=.coverage_temp > /mnt/extra-addons/$TEST_MODULE/coverage/coverage.txt;
+EOF
+        (cd $PROJECT_FULLPATH; docker cp cov_test:/mnt/extra-addons/$TEST_MODULE/coverage/ ${PROJECT_FULLPATH}/addons/$TEST_MODULE)
+        (cd $PROJECT_FULLPATH; docker-compose stop web)
+        (cd $PROJECT_FULLPATH; docker-compose start web)
+
+    elif [ -v TEST_MODULE ] && [ ! -z COV_ALL ]; then
+        echo "START COVERAGE REPORT FOR ALL CUSTOM MODULES ON ($TEST_DB) DB"
+        (cd $PROJECT_FULLPATH; docker-compose run -d --name="cov_test" --rm web)
+        docker exec -i -u root cov_test sh <<-EOF
+        ./entrypoint.sh;
+        coverage run --source=/mnt/extra-addons --data-file=.coverage_temp /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d $TEST_DB --test-enable -i $TEST_MODULE --stop-after-init --log-level=test;
+        coverage report --data-file=.coverage_temp;
+        coverage xml --data-file=.coverage_temp -o /mnt/extra-addons/coverage-all/coverage-xml.xml;
+EOF
+        (cd $PROJECT_FULLPATH;docker cp cov_test:/mnt/extra-addons/coverage-all  ${PROJECT_FULLPATH}/addons)
+        (cd $PROJECT_FULLPATH; docker-compose stop web)
+        (cd $PROJECT_FULLPATH; docker-compose start web)
+    else
+        echo "You need to specify module and all, or module. Use -m or --all."
+        display_help
+    fi
+}
+
 rebuild_container(){
     if [ -z CONTAINER_NAME ] || [ "$CONTAINER_NAME" == "" ]; then
         echo "You need to specify container name that you want to rebuild. Use -r or --rebuild"
@@ -130,6 +167,8 @@ project_exist() {
         exit 1
     elif [ ! -z "${TEST}" ]; then
         run_unit_tests
+    elif [ ! -z "${COV}" ]; then
+        run_unit_tests_with_coverage
     elif [ ! -z "${CONTAINER_NAME}" ]; then
         rebuild_container
     elif [ ! -z "${INSTALL_MODULE}" ]; then
@@ -143,6 +182,7 @@ create_project() {
     echo "CREATE PROJECT"
     cp -r ./config/* "${PROJECT_FULLPATH}/config/"
     cp -r ./docker-compose.yml "${PROJECT_FULLPATH}/"
+    cp -r ./.coveragerc "${PROJECT_FULLPATH}/"
     cp -r ./entrypoint.sh "${PROJECT_FULLPATH}/"
     cp -r ./launch.json "${PROJECT_FULLPATH}/.vscode/"
     clone_addons
@@ -251,9 +291,11 @@ display_help() {
     echo "   -d, --delete                        Delete project if exist"
     echo "   -r, --rebuild                  (N)  Rebuild container in project with given name"
     echo "   -t, --test                          Run tests."
+    echo "   -c, --coverage                      Run coverage."
     echo "   -m, --module                   (N)  Module to test"
     echo "       --tags                     (N)  Tags to test"
     echo "       --db                       (N)  Database to test on"
+    echo "       --all                      (N) Coverage report for all custom modules"
     echo "       --install                  (N)  Rebuild web container and install given module"
 
     echo
@@ -265,7 +307,7 @@ display_help() {
 # Process the input options. Add options as needed.        #
 ############################################################
 
-PARSED_ARGS=$(getopt -a -o n:o:p:a:b:m:r:edth -l name:,odoo:,psql:,addons:,branch:,module:,db:,tags:,rebuild:,install:,enterprise,delete,test,help -- "$@")
+PARSED_ARGS=$(getopt -a -o n:o:p:a:b:m:r:edth -l name:,odoo:,psql:,addons:,branch:,module:,db:,tags:,rebuild:,install:,enterprise,delete,test,coverage,all,help -- "$@")
 VALID_ARGS=$?
 if [ "$VALID_ARGS" != "0" ]; then
     display_help
@@ -304,6 +346,14 @@ while :; do
         ;;
     -t | --test)
         TEST='T'
+        shift
+        ;;
+    -c | --coverage)
+        COV='C'
+        shift
+        ;;
+    --all)
+        COV_ALL='A'
         shift
         ;;
     -m | --module)
