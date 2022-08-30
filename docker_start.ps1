@@ -27,7 +27,7 @@ param(
 
     [Alias('tags')] $TEST_TAGS,
 
-    [Alias('all')] $COV_ALL,
+    [Alias('all')] [switch] $COV_ALL,
 
     [Alias('h', 'help')] [switch] $display_help
 
@@ -172,23 +172,25 @@ function run_unit_tests_with_coverage {
         coverage report --data-file=.coverage_temp > /mnt/extra-addons/$TEST_MODULE/coverage/coverage.txt;
 "@ | docker exec -i -u root cov_test sh
         Set-Location $PROJECT_FULLPATH; docker cp cov_test:/mnt/extra-addons/$TEST_MODULE/coverage/ ${PROJECT_FULLPATH}/addons/$TEST_MODULE
-        Set-Location $PROJECT_FULLPATH; docker-compose stop web
-        Set-Location $PROJECT_FULLPATH; docker-compose start web
+        Set-Location $PROJECT_FULLPATH; docker stop cov_test
+        Set-Location $PROJECT_FULLPATH; docker rm cov_test
+        # Set-Location $PROJECT_FULLPATH; docker-compose start web
         Set-Location $location
     }
-    elseif ( $null -ne $TEST_MODULE -and $null -ne $COV_ALL )
+    elseif ( $null -ne $TEST_TAGS -and $null -ne $COV_ALL )
     {
-        Write-Output "START COVERAGE REPORT FOR ALL CUSTOM MODULES ON ($TEST_DB) DB"
-        Set-Location $PROJECT_FULLPATH; docker-compose run -d --name="cov_test" --rm  web 
+        Write-Output "START COVERAGE REPORT ON ($TEST_DB) DB FOR ($TEST_TAGS) TAGS"
+        Set-Location $PROJECT_FULLPATH; docker-compose run --rm -d --name="cov_test" web 
 @"
         ./entrypoint.sh;
-        coverage run --source=/mnt/extra-addons --data-file=.coverage_temp /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d $TEST_DB --test-enable -i $TEST_MODULE --stop-after-init --log-level=test;
+        coverage run --source=/mnt/extra-addons --data-file=.coverage_temp /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d $TEST_DB --test-enable --test-tags=$TEST_TAGS --stop-after-init --log-level=test;
         coverage report --data-file=.coverage_temp;
         coverage xml --data-file=.coverage_temp -o /mnt/extra-addons/coverage-all/coverage-xml.xml;
 "@ | docker exec -i -u root cov_test sh
         Set-Location $PROJECT_FULLPATH; docker cp cov_test:/mnt/extra-addons/coverage-all  ${PROJECT_FULLPATH}/addons
-        Set-Location $PROJECT_FULLPATH; docker-compose stop web
-        Set-Location $PROJECT_FULLPATH; docker-compose start web
+        Set-Location $PROJECT_FULLPATH; docker stop cov_test
+        Set-Location $PROJECT_FULLPATH; docker rm cov_test
+        # Set-Location $PROJECT_FULLPATH; docker-compose start web
         Set-Location $location
     }
     else

@@ -122,21 +122,23 @@ run_unit_tests_with_coverage(){
         coverage report --data-file=.coverage_temp > /mnt/extra-addons/$TEST_MODULE/coverage/coverage.txt;
 EOF
         (cd $PROJECT_FULLPATH; docker cp cov_test:/mnt/extra-addons/$TEST_MODULE/coverage/ ${PROJECT_FULLPATH}/addons/$TEST_MODULE)
-        (cd $PROJECT_FULLPATH; docker-compose stop web)
-        (cd $PROJECT_FULLPATH; docker-compose start web)
+        (cd $PROJECT_FULLPATH; docker stop cov_test)
+        (cd $PROJECT_FULLPATH; docker rm cov_test)
+        # (cd $PROJECT_FULLPATH; docker-compose start web)
 
-    elif [ -v TEST_MODULE ] && [ ! -z COV_ALL ]; then
-        echo "START COVERAGE REPORT FOR ALL CUSTOM MODULES ON ($TEST_DB) DB"
+    elif [ -v TEST_TAGS ] && [ ! -z COV_ALL ]; then
+        echo "START COVERAGE REPORT ON ($TEST_DB) DB FOR ($TEST_TAGS) TAGS"
         (cd $PROJECT_FULLPATH; docker-compose run -d --name="cov_test" --rm web)
         docker exec -i -u root cov_test sh <<-EOF
         ./entrypoint.sh;
-        coverage run --source=/mnt/extra-addons --data-file=.coverage_temp /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d $TEST_DB --test-enable -i $TEST_MODULE --stop-after-init --log-level=test;
+        coverage run --source=/mnt/extra-addons --data-file=.coverage_temp /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d $TEST_DB --test-enable --test-tags=$TEST_TAGS --stop-after-init --log-level=test;
         coverage report --data-file=.coverage_temp;
         coverage xml --data-file=.coverage_temp -o /mnt/extra-addons/coverage-all/coverage-xml.xml;
 EOF
         (cd $PROJECT_FULLPATH;docker cp cov_test:/mnt/extra-addons/coverage-all  ${PROJECT_FULLPATH}/addons)
-        (cd $PROJECT_FULLPATH; docker-compose stop web)
-        (cd $PROJECT_FULLPATH; docker-compose start web)
+        (cd $PROJECT_FULLPATH; docker stop cov_test)
+        (cd $PROJECT_FULLPATH; docker rm cov_test)
+        # (cd $PROJECT_FULLPATH; docker-compose start web)
     else
         echo "You need to specify module and all, or module. Use -m or --all."
         display_help
