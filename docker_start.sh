@@ -111,7 +111,7 @@ run_unit_tests_with_coverage(){
         echo "You need to specify database to run tests on. Use --db."
         display_help
     fi
-    if [ -v TEST_MODULE ] && [ -z COV_ALL ]; then
+    if [ -v TEST_MODULE ]; then
         echo "START COVERAGE REPORT ON ($TEST_DB) DB FOR ($TEST_MODULE) MODULE"
         (cd $PROJECT_FULLPATH; docker-compose run -d --name="cov_test" --rm web)
         docker exec -i -u root cov_test sh <<-EOF
