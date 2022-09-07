@@ -9,7 +9,6 @@
 [paths]
  source =
     /mnt/extra-addons/
-    C:\Users\klaud\source\repos\MyOdoo\DockerProjects\gcp_dev_15\addons
 [report]
  # Regexes for lines to exclude from consideration
  exclude_lines =
