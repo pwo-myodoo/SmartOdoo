@@ -105,40 +105,75 @@ run_unit_tests(){
         display_help
     fi
 }
-
+        # coverage run --source=/mnt/extra-addons/$TEST_MODULE --data-file=.coverage_temp /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d $TEST_DB --test-enable -i $TEST_MODULE --stop-after-init --log-level=test;
+        # coverage report --data-file=.coverage_temp;
+        # coverage xml --data-file=.coverage_temp -o /mnt/extra-addons/$TEST_MODULE/coverage/coverage-xml.xml;
+        # coverage report --data-file=.coverage_temp > /mnt/extra-addons/$TEST_MODULE/coverage/coverage.txt;
 run_unit_tests_with_coverage(){
     if [ -z TEST_DB ] || [ "$TEST_DB" == "" ]; then
         echo "You need to specify database to run tests on. Use --db."
         display_help
     fi
     if [ -v TEST_MODULE ]; then
+        LIST_OF_ALL_MODULES=""
+        cd $PROJECT_FULLPATH/addons;for d in */; do
+            if [ -e $d/__init__.py ]; then
+                LIST_OF_ALL_MODULES+="${d%/},"
+            fi
+        done
+        # echo ${LIST_OF_ALL_MODULES:0:-1}
         echo "START COVERAGE REPORT ON ($TEST_DB) DB FOR ($TEST_MODULE) MODULE"
+        (cd $PROJECT_FULLPATH; docker-compose stop web)
+        docker exec -i -u root $PROJECT_NAME-db sh <<-EOF
+        psql -U odoo -d postgres -c "DROP DATABASE IF EXISTS db_test"
+        psql -U odoo -d postgres -c "CREATE DATABASE db_test"
+EOF
+# --db_user=odoo --db_host=db --db_password=odoo
+        # odoo --db_user=odoo --db_host=db --db_password=odoo --addons-path=/mnt/extra-addons -i all -d db_test --stop-after-init;
+        # odoo --db_user=odoo --db_host=db --db_password=odoo --addons-path=/mnt/extra-addons -u all -i ${LIST_OF_ALL_MODULES:0:-1} -d db_test --stop-after-init -c /etc/odoo/odoo.conf;
         (cd $PROJECT_FULLPATH; docker-compose run -d --name="cov_test" --rm web)
         docker exec -i -u root cov_test sh <<-EOF
         ./entrypoint.sh;
-        coverage run --source=/mnt/extra-addons/$TEST_MODULE --data-file=.coverage_temp /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d $TEST_DB --test-enable -i $TEST_MODULE --stop-after-init --log-level=test;
+        coverage run --source=/mnt/extra-addons --data-file=.coverage_temp /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d db_test -i bill_limit,hr_employee_extension --test-tags $TEST_MODULE -p 8001 --stop-after-init --log-level=test;
         coverage report --data-file=.coverage_temp;
-        coverage xml --data-file=.coverage_temp -o /mnt/extra-addons/$TEST_MODULE/coverage/coverage-xml.xml;
-        coverage report --data-file=.coverage_temp > /mnt/extra-addons/$TEST_MODULE/coverage/coverage.txt;
 EOF
-        (cd $PROJECT_FULLPATH; docker cp cov_test:/mnt/extra-addons/$TEST_MODULE/coverage/ ${PROJECT_FULLPATH}/addons/$TEST_MODULE)
+        # coverage run --source=/mnt/extra-addons --data-file=.coverage_temp /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d db_test -i $TEST_MODULE --test-tags '/$TEST_MODULE' -p 8001 --stop-after-init --log-level=test;
+
+        # (cd $PROJECT_FULLPATH; docker cp cov_test:/mnt/extra-addons/$TEST_MODULE/coverage/ ${PROJECT_FULLPATH}/addons/$TEST_MODULE)
         (cd $PROJECT_FULLPATH; docker stop cov_test)
         (cd $PROJECT_FULLPATH; docker rm cov_test)
-        # (cd $PROJECT_FULLPATH; docker-compose start web)
+        (cd $PROJECT_FULLPATH; docker-compose restart)
+        docker exec -i -u root $PROJECT_NAME-db sh <<-EOF
+        psql -U odoo -d postgres -c "DROP DATABASE IF EXISTS db_test"
+EOF
 
     elif [ -v TEST_TAGS ] && [ ! -z COV_ALL ]; then
         echo "START COVERAGE REPORT ON ($TEST_DB) DB FOR ($TEST_TAGS) TAGS"
+        (cd $PROJECT_FULLPATH; docker-compose stop web)
+        docker exec -i -u root $PROJECT_NAME-db sh <<-EOF
+        psql -U odoo -d postgres -c "DROP DATABASE IF EXISTS db_test"
+        psql -U odoo -d postgres -c "CREATE DATABASE db_test"
+EOF
         (cd $PROJECT_FULLPATH; docker-compose run -d --name="cov_test" --rm web)
+        # coverage run --source=/mnt/extra-addons --data-file=.coverage_temp /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d $TEST_DB --test-enable --test-tags=$TEST_TAGS --stop-after-init --log-level=test;
+
         docker exec -i -u root cov_test sh <<-EOF
         ./entrypoint.sh;
-        coverage run --source=/mnt/extra-addons --data-file=.coverage_temp /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d $TEST_DB --test-enable --test-tags=$TEST_TAGS --stop-after-init --log-level=test;
+        coverage run --source=/mnt/extra-addons/$TEST_TAGS --data-file=.coverage_temp /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d db_test -i $TEST_TAGS --test-tags '/$TEST_TAGS' -p 8001 --stop-after-init --log-level=test;
         coverage report --data-file=.coverage_temp;
-        coverage xml --data-file=.coverage_temp -o /mnt/extra-addons/coverage-all/coverage-xml.xml;
+        coverage xml --data-file=.coverage_temp -o /mnt/extra-addons/$TEST_TAGS/coverage/coverage-xml.xml;
+        coverage report --data-file=.coverage_temp > /mnt/extra-addons/$TEST_TAGS/coverage/coverage.txt;
 EOF
-        (cd $PROJECT_FULLPATH;docker cp cov_test:/mnt/extra-addons/coverage-all  ${PROJECT_FULLPATH}/addons)
+        # coverage report --data-file=.coverage_temp;
+        # coverage xml --data-file=.coverage_temp -o /mnt/extra-addons/coverage-all/coverage-xml.xml;
+        # (cd $PROJECT_FULLPATH;docker cp cov_test:/mnt/extra-addons/coverage-all  ${PROJECT_FULLPATH}/addons)
+        (cd $PROJECT_FULLPATH; docker cp cov_test:/mnt/extra-addons/$TEST_TAGS/coverage/ ${PROJECT_FULLPATH}/addons/$TEST_TAGS)
         (cd $PROJECT_FULLPATH; docker stop cov_test)
         (cd $PROJECT_FULLPATH; docker rm cov_test)
-        # (cd $PROJECT_FULLPATH; docker-compose start web)
+        (cd $PROJECT_FULLPATH; docker-compose start web)
+        docker exec -i -u root $PROJECT_NAME-db sh <<-EOF
+        psql -U odoo -d postgres -c "DROP DATABASE IF EXISTS db_test"
+EOF
     else
         echo "You need to specify module and all, or module. Use -m or --all."
         display_help
