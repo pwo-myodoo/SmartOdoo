@@ -134,7 +134,8 @@ EOF
         (cd $PROJECT_FULLPATH; docker-compose run -d --name="cov_test" --rm web)
         docker exec -i -u root cov_test sh <<-EOF
         ./entrypoint.sh;
-        coverage run --source=/mnt/extra-addons --data-file=.coverage_temp /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d db_test -i bill_limit,hr_employee_extension --test-tags $TEST_MODULE -p 8001 --stop-after-init --log-level=test;
+        /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf --stop-after-init -d db_test -i $TEST_MODULE;
+        coverage run --source=/mnt/extra-addons --data-file=.coverage_temp /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf --log-level=test --stop-after-init -d db_test --test-tags /$TEST_MODULE;
         coverage report --data-file=.coverage_temp;
 EOF
         # coverage run --source=/mnt/extra-addons --data-file=.coverage_temp /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d db_test -i $TEST_MODULE --test-tags '/$TEST_MODULE' -p 8001 --stop-after-init --log-level=test;
@@ -142,10 +143,10 @@ EOF
         # (cd $PROJECT_FULLPATH; docker cp cov_test:/mnt/extra-addons/$TEST_MODULE/coverage/ ${PROJECT_FULLPATH}/addons/$TEST_MODULE)
         (cd $PROJECT_FULLPATH; docker stop cov_test)
         (cd $PROJECT_FULLPATH; docker rm cov_test)
-        (cd $PROJECT_FULLPATH; docker-compose restart)
         docker exec -i -u root $PROJECT_NAME-db sh <<-EOF
         psql -U odoo -d postgres -c "DROP DATABASE IF EXISTS db_test"
 EOF
+        (cd $PROJECT_FULLPATH; docker-compose restart)
 
     elif [ -v TEST_TAGS ] && [ ! -z COV_ALL ]; then
         echo "START COVERAGE REPORT ON ($TEST_DB) DB FOR ($TEST_TAGS) TAGS"
@@ -170,10 +171,10 @@ EOF
         (cd $PROJECT_FULLPATH; docker cp cov_test:/mnt/extra-addons/$TEST_TAGS/coverage/ ${PROJECT_FULLPATH}/addons/$TEST_TAGS)
         (cd $PROJECT_FULLPATH; docker stop cov_test)
         (cd $PROJECT_FULLPATH; docker rm cov_test)
-        (cd $PROJECT_FULLPATH; docker-compose start web)
         docker exec -i -u root $PROJECT_NAME-db sh <<-EOF
         psql -U odoo -d postgres -c "DROP DATABASE IF EXISTS db_test"
 EOF
+        (cd $PROJECT_FULLPATH; docker-compose restart)
     else
         echo "You need to specify module and all, or module. Use -m or --all."
         display_help
