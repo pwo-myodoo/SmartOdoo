@@ -110,19 +110,24 @@ run_unit_tests(){
         # coverage xml --data-file=.coverage_temp -o /mnt/extra-addons/$TEST_MODULE/coverage/coverage-xml.xml;
         # coverage report --data-file=.coverage_temp > /mnt/extra-addons/$TEST_MODULE/coverage/coverage.txt;
 run_unit_tests_with_coverage(){
-    if [ -z TEST_DB ] || [ "$TEST_DB" == "" ]; then
-        echo "You need to specify database to run tests on. Use --db."
-        display_help
-    fi
-    if [ -v TEST_MODULE ]; then
+    # if [ -z TEST_DB ] || [ "$TEST_DB" == "" ]; then
+    #     echo "You need to specify database to run tests on. Use --db."
+    #     display_help
+    # fi
+
+#====================================================================================
+#                                   MULTI
+#====================================================================================
+
+    if [ -v TEST_TAGS ] && [ ! -z COV_ALL ]; then
         LIST_OF_ALL_MODULES=""
         cd $PROJECT_FULLPATH/addons;for d in */; do
             if [ -e $d/__init__.py ]; then
                 LIST_OF_ALL_MODULES+="${d%/},"
             fi
         done
-        # echo ${LIST_OF_ALL_MODULES:0:-1}
-        echo "START COVERAGE REPORT ON ($TEST_DB) DB FOR ($TEST_MODULE) MODULE"
+        echo ${LIST_OF_ALL_MODULES:0:-1}
+        echo "START COVERAGE REPORT ON ($TEST_DB) DB FOR ($TEST_TAGS) TAGS"
         (cd $PROJECT_FULLPATH; docker-compose stop web)
         docker exec -i -u root $PROJECT_NAME-db sh <<-EOF
         psql -U odoo -d postgres -c "DROP DATABASE IF EXISTS db_test"
@@ -130,12 +135,12 @@ run_unit_tests_with_coverage(){
 EOF
 # --db_user=odoo --db_host=db --db_password=odoo
         # odoo --db_user=odoo --db_host=db --db_password=odoo --addons-path=/mnt/extra-addons -i all -d db_test --stop-after-init;
+        # /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf --stop-after-init -d db_test -i $TEST_MODULE;
         # odoo --db_user=odoo --db_host=db --db_password=odoo --addons-path=/mnt/extra-addons -u all -i ${LIST_OF_ALL_MODULES:0:-1} -d db_test --stop-after-init -c /etc/odoo/odoo.conf;
         (cd $PROJECT_FULLPATH; docker-compose run -d --name="cov_test" --rm web)
         docker exec -i -u root cov_test sh <<-EOF
         ./entrypoint.sh;
-        /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf --stop-after-init -d db_test -i $TEST_MODULE;
-        coverage run --source=/mnt/extra-addons --data-file=.coverage_temp /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf --log-level=test --stop-after-init -d db_test --test-tags /$TEST_MODULE;
+        coverage run --source=/mnt/extra-addons --data-file=.coverage_temp /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d db_test -i ${LIST_OF_ALL_MODULES:0:-1} --test-tags /${LIST_OF_ALL_MODULES:0:-1} -p 8001 --stop-after-init --log-level=test;
         coverage report --data-file=.coverage_temp;
 EOF
         # coverage run --source=/mnt/extra-addons --data-file=.coverage_temp /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d db_test -i $TEST_MODULE --test-tags '/$TEST_MODULE' -p 8001 --stop-after-init --log-level=test;
@@ -148,8 +153,12 @@ EOF
 EOF
         (cd $PROJECT_FULLPATH; docker-compose restart)
 
-    elif [ -v TEST_TAGS ] && [ ! -z COV_ALL ]; then
-        echo "START COVERAGE REPORT ON ($TEST_DB) DB FOR ($TEST_TAGS) TAGS"
+#====================================================================================
+#                                   SINGLE
+#====================================================================================
+
+    elif [ -v TEST_MODULE ]; then
+        echo "START COVERAGE REPORT ON ($TEST_DB) DB FOR ($TEST_MODULE) MODULE"
         (cd $PROJECT_FULLPATH; docker-compose stop web)
         docker exec -i -u root $PROJECT_NAME-db sh <<-EOF
         psql -U odoo -d postgres -c "DROP DATABASE IF EXISTS db_test"
@@ -160,11 +169,15 @@ EOF
 
         docker exec -i -u root cov_test sh <<-EOF
         ./entrypoint.sh;
-        coverage run --source=/mnt/extra-addons/$TEST_TAGS --data-file=.coverage_temp /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d db_test -i $TEST_TAGS --test-tags '/$TEST_TAGS' -p 8001 --stop-after-init --log-level=test;
+        coverage run --source=/mnt/extra-addons/$TEST_MODULE --data-file=.coverage_temp /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d db_test -i $TEST_MODULE --test-tags '/$TEST_MODULE' -p 8001 --stop-after-init --log-level=test;
         coverage report --data-file=.coverage_temp;
-        coverage xml --data-file=.coverage_temp -o /mnt/extra-addons/$TEST_TAGS/coverage/coverage-xml.xml;
-        coverage report --data-file=.coverage_temp > /mnt/extra-addons/$TEST_TAGS/coverage/coverage.txt;
 EOF
+        if [ -v REPORT ]; then
+        docker exec -i -u root cov_test sh <<-EOF
+        coverage xml --data-file=.coverage_temp -o /mnt/extra-addons/$TEST_MODULE/coverage/coverage-xml.xml;
+        coverage report --data-file=.coverage_temp > /mnt/extra-addons/$TEST_MODULE/coverage/coverage.txt;
+EOF
+        fi
         # coverage report --data-file=.coverage_temp;
         # coverage xml --data-file=.coverage_temp -o /mnt/extra-addons/coverage-all/coverage-xml.xml;
         # (cd $PROJECT_FULLPATH;docker cp cov_test:/mnt/extra-addons/coverage-all  ${PROJECT_FULLPATH}/addons)
@@ -329,12 +342,13 @@ display_help() {
     echo "   -d, --delete                        Delete project if exist"
     echo "   -r, --rebuild                  (N)  Rebuild container in project with given name"
     echo "   -t, --test                          Run tests."
-    echo "   -c, --coverage                      Run coverage."
+    echo "   -c, --coverage                      Run tests and generate coverage report, and download report to coverage directory."
     echo "   -m, --module                   (N)  Module to test"
     echo "       --tags                     (N)  Tags to test"
     echo "       --db                       (N)  Database to test on"
-    echo "       --all                      (N) Coverage report for all custom modules"
+    echo "       --all                      (N)  Coverage report for all custom modules"
     echo "       --install                  (N)  Rebuild web container and install given module"
+    echo "       --report                   (N)  Modyfie coverage function to only show report."
 
     echo
     # echo some stuff here for the -a or --add-options
@@ -345,7 +359,7 @@ display_help() {
 # Process the input options. Add options as needed.        #
 ############################################################
 
-PARSED_ARGS=$(getopt -a -o n:o:p:a:b:m:r:edth -l name:,odoo:,psql:,addons:,branch:,module:,db:,tags:,rebuild:,install:,enterprise,delete,test,coverage,all,help -- "$@")
+PARSED_ARGS=$(getopt -a -o n:o:p:a:b:m:r:edth -l name:,odoo:,psql:,addons:,branch:,module:,db:,tags:,rebuild:,install:,enterprise,delete,test,coverage,all,report,help -- "$@")
 VALID_ARGS=$?
 if [ "$VALID_ARGS" != "0" ]; then
     display_help
@@ -392,6 +406,10 @@ while :; do
         ;;
     --all)
         COV_ALL='A'
+        shift
+        ;;
+    --report)
+        REPORT='R'
         shift
         ;;
     -m | --module)
