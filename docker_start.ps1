@@ -137,7 +137,9 @@ function run_unit_tests {
     if ( $null -ne $TEST_MODULE )
     {
         Write-Output "START ODOO UNIT TESTS ON ($TEST_DB) DB FOR ($TEST_MODULE) MODULE"
-        Set-Location $PROJECT_FULLPATH; docker-compose run --rm web --test-enable --log-level=test --stop-after-init -d $TEST_DB -i $TEST_MODULE
+        # Set-Location $PROJECT_FULLPATH; docker-compose stop web
+        Set-Location $PROJECT_FULLPATH; docker-compose run --rm web --test-enable --log-level=test --stop-after-init -d $TEST_DB -i $TEST_MODULE --test-tags '/$TEST_MODULE' -p 8001
+        # Set-Location $PROJECT_FULLPATH; docker-compose restart
         Set-Location $location
     }
     elseif ( $null -ne $TEST_TAGS )
@@ -155,18 +157,23 @@ function run_unit_tests {
 
 function run_unit_tests_with_coverage {
     $location = Get-Location
-    if ( $null -eq $TEST_DB -or $TEST_DB -eq "" )
-    {
-        Write-Output "You need to specify database to run tests on. Use --db or -database."
-        display_help
-    }
+    # if ( $null -eq $TEST_DB -or $TEST_DB -eq "" )
+    # {
+    #     Write-Output "You need to specify database to run tests on. Use --db or -database."
+    #     display_help
+    # }
     if ( $null -ne $TEST_MODULE )
     {
         Write-Output "START COVERAGE REPORT ON ($TEST_DB) DB FOR ($TEST_MODULE) MODULE"
+        Set-Location $PROJECT_FULLPATH; docker-compose stop web
+@"
+        psql -U odoo -d postgres -c "DROP DATABASE IF EXISTS db_test"
+        psql -U odoo -d postgres -c "CREATE DATABASE db_test"
+"@ | docker exec -i -u root $PROJECT_NAME-db sh
         Set-Location $PROJECT_FULLPATH; docker-compose run -d --name="cov_test" --rm web 
 @"
         ./entrypoint.sh;
-        coverage run --source=/mnt/extra-addons/$TEST_MODULE --data-file=.coverage_temp /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d $TEST_DB --test-enable -i $TEST_MODULE --stop-after-init --log-level=test;
+        coverage run --source=/mnt/extra-addons/$TEST_MODULE --data-file=.coverage_temp /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d db_test -i $TEST_MODULE --test-tags '/$TEST_MODULE' -p 8001 --stop-after-init --log-level=test;
         coverage report --data-file=.coverage_temp;
         coverage xml --data-file=.coverage_temp -o /mnt/extra-addons/$TEST_MODULE/coverage/coverage-xml.xml;
         coverage report --data-file=.coverage_temp > /mnt/extra-addons/$TEST_MODULE/coverage/coverage.txt;
@@ -174,8 +181,12 @@ function run_unit_tests_with_coverage {
         Set-Location $PROJECT_FULLPATH; docker cp cov_test:/mnt/extra-addons/$TEST_MODULE/coverage/ ${PROJECT_FULLPATH}/addons/$TEST_MODULE
         Set-Location $PROJECT_FULLPATH; docker stop cov_test
         Set-Location $PROJECT_FULLPATH; docker rm cov_test
-        # Set-Location $PROJECT_FULLPATH; docker-compose start web
+@"
+        psql -U odoo -d postgres -c "DROP DATABASE IF EXISTS db_test"
+"@ | docker exec -i -u root $PROJECT_NAME-db sh 
+        Set-Location $PROJECT_FULLPATH; docker-compose restart
         Set-Location $location
+
     }
     elseif ( $null -ne $TEST_TAGS -and $null -ne $COV_ALL )
     {
