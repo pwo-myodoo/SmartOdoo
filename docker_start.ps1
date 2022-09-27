@@ -190,18 +190,50 @@ function run_unit_tests_with_coverage {
     }
     elseif ( $null -ne $TEST_TAGS -and $null -ne $COV_ALL )
     {
+        # Get-ChildItem -Directory -Name | Where-Object {$_ | Get-ChildItem -File -Filter "__init__*"}
+#         $xd = Get-ChildItem -Directory -Name | Where-Object {$_ | Get-ChildItem -File -Filter "__init__*"}
+# foreach ($i in $xd)
+# {
+#     Write-Host $i
+# }
+# LIST_OF_ALL_MODULES=""
+# cd $PROJECT_FULLPATH/addons;for d in */; do
+#     if [ -e $d/__init__.py ]; then
+#         LIST_OF_ALL_MODULES+="${d%/},"
+#     fi
+# done
+# echo ${LIST_OF_ALL_MODULES:0:-1}
         Write-Output "START COVERAGE REPORT ON ($TEST_DB) DB FOR ($TEST_TAGS) TAGS"
-        Set-Location $PROJECT_FULLPATH; docker-compose run --rm -d --name="cov_test" web 
+        Set-Location $PROJECT_FULLPATH; docker-compose stop web
 @"
-        ./entrypoint.sh;
-        coverage run --source=/mnt/extra-addons --data-file=.coverage_temp /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d $TEST_DB --test-enable --test-tags=$TEST_TAGS --stop-after-init --log-level=test;
-        coverage report --data-file=.coverage_temp;
-        coverage xml --data-file=.coverage_temp -o /mnt/extra-addons/coverage-all/coverage-xml.xml;
+        psql -U odoo -d postgres -c "DROP DATABASE IF EXISTS db_test"
+        psql -U odoo -d postgres -c "CREATE DATABASE db_test"
+"@ | docker exec -i -u root $PROJECT_NAME-db sh
+        Set-Location $PROJECT_FULLPATH; docker-compose run -d --name="cov_test" --rm web
+        Set-Location $PROJECT_FULLPATH;$xd = Get-ChildItem -Directory -Name | Where-Object {$_ | Get-ChildItem -File -Filter "__init__*"}
+        # cd mnt/extra-addons/;
+        # pwd; 
+        # echo */;
+#         LIST_OF_ALL_MODULES="";
+# cd mnt/extra-addons/;
+# for d in */; do if [ -e $d/__init__.py ]; then LIST_OF_ALL_MODULES+="${d%/},"; fi done;
+# for d in */; do if [ -e $d/__init__.py ]; then echo ${d%/}; fi done;
+# for d in mnt/extra-addons/*/; do echo "${d%/}"; done;
+# echo ${LIST_OF_ALL_MODULES:0:-1};
+# echo ${LIST_OF_ALL_MODULES};
+
+@"
+./entrypoint.sh;
+echo $xd;
+for d in $xd; do echo "${d%/}"; done;
 "@ | docker exec -i -u root cov_test sh
-        Set-Location $PROJECT_FULLPATH; docker cp cov_test:/mnt/extra-addons/coverage-all  ${PROJECT_FULLPATH}/addons
+        # Set-Location $PROJECT_FULLPATH; docker cp cov_test:/mnt/extra-addons/coverage-all  ${PROJECT_FULLPATH}/addons
         Set-Location $PROJECT_FULLPATH; docker stop cov_test
         Set-Location $PROJECT_FULLPATH; docker rm cov_test
-        # Set-Location $PROJECT_FULLPATH; docker-compose start web
+@"
+        psql -U odoo -d postgres -c "DROP DATABASE IF EXISTS db_test"
+"@ | docker exec -i -u root $PROJECT_NAME-db sh 
+        Set-Location $PROJECT_FULLPATH; docker-compose restart
         Set-Location $location
     }
     else
