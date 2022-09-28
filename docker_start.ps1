@@ -29,6 +29,8 @@ param(
 
     [Alias('all')] [switch] $COV_ALL,
 
+    [Alias('r', 'report')] [switch] $ONLY_REPORT,
+
     [Alias('h', 'help')] [switch] $display_help
 
 )
@@ -138,7 +140,7 @@ function run_unit_tests {
     {
         Write-Output "START ODOO UNIT TESTS ON ($TEST_DB) DB FOR ($TEST_MODULE) MODULE"
         # Set-Location $PROJECT_FULLPATH; docker-compose stop web
-        Set-Location $PROJECT_FULLPATH; docker-compose run --rm web --test-enable --log-level=test --stop-after-init -d $TEST_DB -i $TEST_MODULE --test-tags '/$TEST_MODULE' -p 8001
+        Set-Location $PROJECT_FULLPATH; docker-compose run --rm web --test-enable --log-level=test --stop-after-init -d $TEST_DB -i $TEST_MODULE --test-tags /$TEST_MODULE -p 8001
         # Set-Location $PROJECT_FULLPATH; docker-compose restart
         Set-Location $location
     }
@@ -157,11 +159,6 @@ function run_unit_tests {
 
 function run_unit_tests_with_coverage {
     $location = Get-Location
-    # if ( $null -eq $TEST_DB -or $TEST_DB -eq "" )
-    # {
-    #     Write-Output "You need to specify database to run tests on. Use --db or -database."
-    #     display_help
-    # }
     if ( $null -ne $TEST_MODULE )
     {
         Write-Output "START COVERAGE REPORT ON ($TEST_DB) DB FOR ($TEST_MODULE) MODULE"
@@ -178,7 +175,9 @@ function run_unit_tests_with_coverage {
         coverage xml --data-file=.coverage_temp -o /mnt/extra-addons/$TEST_MODULE/coverage/coverage-xml.xml;
         coverage report --data-file=.coverage_temp > /mnt/extra-addons/$TEST_MODULE/coverage/coverage.txt;
 "@ | docker exec -i -u root cov_test sh
-        Set-Location $PROJECT_FULLPATH; docker cp cov_test:/mnt/extra-addons/$TEST_MODULE/coverage/ ${PROJECT_FULLPATH}/addons/$TEST_MODULE
+        if (!$ONLY_REPORT) {
+            Set-Location $PROJECT_FULLPATH; docker cp cov_test:/mnt/extra-addons/$TEST_MODULE/coverage/ ${PROJECT_FULLPATH}/addons/$TEST_MODULE
+        }
         Set-Location $PROJECT_FULLPATH; docker stop cov_test
         Set-Location $PROJECT_FULLPATH; docker rm cov_test
 @"
@@ -190,19 +189,6 @@ function run_unit_tests_with_coverage {
     }
     elseif ( $null -ne $TEST_TAGS -and $null -ne $COV_ALL )
     {
-        # Get-ChildItem -Directory -Name | Where-Object {$_ | Get-ChildItem -File -Filter "__init__*"}
-#         $xd = Get-ChildItem -Directory -Name | Where-Object {$_ | Get-ChildItem -File -Filter "__init__*"}
-# foreach ($i in $xd)
-# {
-#     Write-Host $i
-# }
-# LIST_OF_ALL_MODULES=""
-# cd $PROJECT_FULLPATH/addons;for d in */; do
-#     if [ -e $d/__init__.py ]; then
-#         LIST_OF_ALL_MODULES+="${d%/},"
-#     fi
-# done
-# echo ${LIST_OF_ALL_MODULES:0:-1}
         Write-Output "START COVERAGE REPORT ON ($TEST_DB) DB FOR ($TEST_TAGS) TAGS"
         Set-Location $PROJECT_FULLPATH; docker-compose stop web
 @"
@@ -210,23 +196,31 @@ function run_unit_tests_with_coverage {
         psql -U odoo -d postgres -c "CREATE DATABASE db_test"
 "@ | docker exec -i -u root $PROJECT_NAME-db sh
         Set-Location $PROJECT_FULLPATH; docker-compose run -d --name="cov_test" --rm web
-        Set-Location $PROJECT_FULLPATH;$xd = Get-ChildItem -Directory -Name | Where-Object {$_ | Get-ChildItem -File -Filter "__init__*"}
-        # cd mnt/extra-addons/;
-        # pwd; 
-        # echo */;
-#         LIST_OF_ALL_MODULES="";
-# cd mnt/extra-addons/;
-# for d in */; do if [ -e $d/__init__.py ]; then LIST_OF_ALL_MODULES+="${d%/},"; fi done;
-# for d in */; do if [ -e $d/__init__.py ]; then echo ${d%/}; fi done;
-# for d in mnt/extra-addons/*/; do echo "${d%/}"; done;
-# echo ${LIST_OF_ALL_MODULES:0:-1};
-# echo ${LIST_OF_ALL_MODULES};
+        $PROJECT_FULLPATH_ADDONS = $PROJECT_FULLPATH + '\addons'
+        Set-Location $PROJECT_FULLPATH_ADDONS; $xd = Get-ChildItem -Directory -Name | Where-Object {$_ | Get-ChildItem -File -Filter "__init__*"}
 
 @"
 ./entrypoint.sh;
-echo $xd;
-for d in $xd; do echo "${d%/}"; done;
+"@ | docker exec -i -u root cov_test bin/bash
+
+        foreach ($obj in $xd)
+        {
+@"
+echo $obj;
+coverage run --source=/mnt/extra-addons/$obj --data-file=cov_temp/.coverage.$obj /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d db_test -i $obj --test-tags '/$obj' -p 8001 --stop-after-init --log-level=test;
+coverage report --data-file=cov_temp/.coverage.$obj;
+coverage xml --data-file=cov_temp/.coverage.$obj -o /mnt/extra-addons/$obj/coverage/coverage-xml.xml;
+coverage report --data-file=cov_temp/.coverage.$obj > /mnt/extra-addons/$obj/coverage/coverage.txt;
 "@ | docker exec -i -u root cov_test sh
+            if (!$ONLY_REPORT) {
+                Set-Location $PROJECT_FULLPATH; docker cp cov_test:/mnt/extra-addons/$obj/coverage/ ${PROJECT_FULLPATH}/addons/$obj
+            }
+        }
+@"
+coverage combine cov_temp/;
+coverage report;
+"@ | docker exec -i -u root cov_test bin/bash
+
         # Set-Location $PROJECT_FULLPATH; docker cp cov_test:/mnt/extra-addons/coverage-all  ${PROJECT_FULLPATH}/addons
         Set-Location $PROJECT_FULLPATH; docker stop cov_test
         Set-Location $PROJECT_FULLPATH; docker rm cov_test
@@ -420,10 +414,11 @@ function display_help {
     Write-Output "-e, -enterprise                    Set for install enterprise modules"
     Write-Output "-d, -delete                        Delete project if exist"
     Write-Output "-t, -test                          Run tests."
-	Write-Output "-c, -coverage                      Run coverage."
+	Write-Output "-c, -coverage                      Run tests with coverage py and download coverage report."
     Write-Output "-m, -module                   (N)  Module to test"
     Write-Output "    -tags                     (N)  Tags to test"
-    Write-Output "    -all                      (N)  Coverage report for all custom modules"
+    Write-Output "    -all                      (N)  Modyfie coverage funtion to run on all modules"
+    Write-Output "-r  -report                   (N)  Modyfie coverage funtion to only show coverage report"
     Write-Output "    -database                 (N)  Database to test on"
 
     # echo some stuff here for the -a or --add-options
