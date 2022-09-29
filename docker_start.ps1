@@ -161,19 +161,19 @@ function run_unit_tests_with_coverage {
     $location = Get-Location
     if ( $null -ne $TEST_MODULE )
     {
-        Write-Output "START COVERAGE REPORT ON ($TEST_DB) DB FOR ($TEST_MODULE) MODULE"
+        Write-Output "GENERATE COVERAGE REPORT ON (db_test) DB FOR ($TEST_MODULE) MODULE"
         Set-Location $PROJECT_FULLPATH; docker-compose stop web
 @"
-        psql -U odoo -d postgres -c "DROP DATABASE IF EXISTS db_test"
-        psql -U odoo -d postgres -c "CREATE DATABASE db_test"
+psql -U odoo -d postgres -c "DROP DATABASE IF EXISTS db_test"
+psql -U odoo -d postgres -c "CREATE DATABASE db_test"
 "@ | docker exec -i -u root $PROJECT_NAME-db sh
         Set-Location $PROJECT_FULLPATH; docker-compose run -d --name="cov_test" --rm web 
 @"
-        ./entrypoint.sh;
-        coverage run --source=/mnt/extra-addons/$TEST_MODULE --data-file=.coverage_temp /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d db_test -i $TEST_MODULE --test-tags '/$TEST_MODULE' -p 8001 --stop-after-init --log-level=test;
-        coverage report --data-file=.coverage_temp;
-        coverage xml --data-file=.coverage_temp -o /mnt/extra-addons/$TEST_MODULE/coverage/coverage-xml.xml;
-        coverage report --data-file=.coverage_temp > /mnt/extra-addons/$TEST_MODULE/coverage/coverage.txt;
+./entrypoint.sh;
+coverage run --source=/mnt/extra-addons/$TEST_MODULE --data-file=cov_temp/.coverage.$TEST_MODULE /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d db_test -i $TEST_MODULE --test-tags '/$TEST_MODULE' -p 8001 --stop-after-init --log-level=test;
+coverage report ---data-file=cov_temp/.coverage.$TEST_MODULE;
+coverage xml ---data-file=cov_temp/.coverage.$TEST_MODULE -o /mnt/extra-addons/$TEST_MODULE/coverage/coverage-xml.xml;
+coverage report ---data-file=cov_temp/.coverage.$TEST_MODULE > /mnt/extra-addons/$TEST_MODULE/coverage/coverage.txt;
 "@ | docker exec -i -u root cov_test sh
         if (!$ONLY_REPORT) {
             Set-Location $PROJECT_FULLPATH; docker cp cov_test:/mnt/extra-addons/$TEST_MODULE/coverage/ ${PROJECT_FULLPATH}/addons/$TEST_MODULE
@@ -181,19 +181,19 @@ function run_unit_tests_with_coverage {
         Set-Location $PROJECT_FULLPATH; docker stop cov_test
         Set-Location $PROJECT_FULLPATH; docker rm cov_test
 @"
-        psql -U odoo -d postgres -c "DROP DATABASE IF EXISTS db_test"
+psql -U odoo -d postgres -c "DROP DATABASE IF EXISTS db_test"
 "@ | docker exec -i -u root $PROJECT_NAME-db sh 
         Set-Location $PROJECT_FULLPATH; docker-compose restart
         Set-Location $location
 
     }
-    elseif ( $null -ne $TEST_TAGS -and $null -ne $COV_ALL )
+    elseif ( $null -ne $COV_ALL )
     {
-        Write-Output "START COVERAGE REPORT ON ($TEST_DB) DB FOR ($TEST_TAGS) TAGS"
+        Write-Output "GENERATE COVERAGE REPORT ON (db_test) DB FOR ALL MODULES INSIDE ADDONS FOLDER IN ($PROJECT_NAME) PROJECT"
         Set-Location $PROJECT_FULLPATH; docker-compose stop web
 @"
-        psql -U odoo -d postgres -c "DROP DATABASE IF EXISTS db_test"
-        psql -U odoo -d postgres -c "CREATE DATABASE db_test"
+psql -U odoo -d postgres -c "DROP DATABASE IF EXISTS db_test"
+psql -U odoo -d postgres -c "CREATE DATABASE db_test"
 "@ | docker exec -i -u root $PROJECT_NAME-db sh
         Set-Location $PROJECT_FULLPATH; docker-compose run -d --name="cov_test" --rm web
         $PROJECT_FULLPATH_ADDONS = $PROJECT_FULLPATH + '\addons'
@@ -225,15 +225,15 @@ coverage report;
         Set-Location $PROJECT_FULLPATH; docker stop cov_test
         Set-Location $PROJECT_FULLPATH; docker rm cov_test
 @"
-        psql -U odoo -d postgres -c "DROP DATABASE IF EXISTS db_test"
+psql -U odoo -d postgres -c "DROP DATABASE IF EXISTS db_test"
 "@ | docker exec -i -u root $PROJECT_NAME-db sh 
         Set-Location $PROJECT_FULLPATH; docker-compose restart
         Set-Location $location
     }
     else
     {
-        Write-Output "You need to specify module and all, or module. Use -m or -all."
-        Write-Output "To properlly use all flag try -all T"
+        Write-Output "You need to specify module to run coverage py with or use -all tag."
+        Write-Output "Try -m module_name or -all"
         display_help
     }
 }
