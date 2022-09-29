@@ -29,7 +29,7 @@ param(
 
     [Alias('all')] [switch] $COV_ALL,
 
-    [Alias('r', 'report')] [switch] $ONLY_REPORT,
+    [Alias('report')] [switch] $ONLY_REPORT,
 
     [Alias('h', 'help')] [switch] $display_help
 
@@ -159,6 +159,9 @@ function run_unit_tests {
 
 function run_unit_tests_with_coverage {
     $location = Get-Location
+#====================================================================================
+#                                   SINGLE
+#====================================================================================
     if ( $null -ne $TEST_MODULE )
     {
         Write-Output "GENERATE COVERAGE REPORT ON (db_test) DB FOR ($TEST_MODULE) MODULE"
@@ -167,16 +170,21 @@ function run_unit_tests_with_coverage {
 psql -U odoo -d postgres -c "DROP DATABASE IF EXISTS db_test"
 psql -U odoo -d postgres -c "CREATE DATABASE db_test"
 "@ | docker exec -i -u root $PROJECT_NAME-db sh
+
         Set-Location $PROJECT_FULLPATH; docker-compose run -d --name="cov_test" --rm web 
+
 @"
 ./entrypoint.sh;
 coverage run --source=/mnt/extra-addons/$TEST_MODULE --data-file=cov_temp/.coverage.$TEST_MODULE /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d db_test -i $TEST_MODULE --test-tags '/$TEST_MODULE' -p 8001 --stop-after-init --log-level=test;
 coverage report ---data-file=cov_temp/.coverage.$TEST_MODULE;
-coverage xml ---data-file=cov_temp/.coverage.$TEST_MODULE -o /mnt/extra-addons/$TEST_MODULE/coverage/coverage-xml.xml;
-coverage report ---data-file=cov_temp/.coverage.$TEST_MODULE > /mnt/extra-addons/$TEST_MODULE/coverage/coverage.txt;
 "@ | docker exec -i -u root cov_test sh
-        if (!$ONLY_REPORT) {
-            Set-Location $PROJECT_FULLPATH; docker cp cov_test:/mnt/extra-addons/$TEST_MODULE/coverage/ ${PROJECT_FULLPATH}/addons/$TEST_MODULE
+
+        if ($null -eq $TEST_DB -or $TEST_DB -eq "") {
+"@
+coverage xml --data-file=cov_temp/.coverage.$TEST_MODULE -o /mnt/extra-addons/$TEST_MODULE/coverage/coverage-xml.xml;
+coverage report --data-file=cov_temp/.coverage.$TEST_MODULE > /mnt/extra-addons/$TEST_MODULE/coverage/coverage.txt;
+@"| docker exec -i -u root cov_test sh
+                    Set-Location $PROJECT_FULLPATH; docker cp cov_test:/mnt/extra-addons/$module/coverage/ ${PROJECT_FULLPATH}/addons/$module
         }
         Set-Location $PROJECT_FULLPATH; docker stop cov_test
         Set-Location $PROJECT_FULLPATH; docker rm cov_test
@@ -187,6 +195,9 @@ psql -U odoo -d postgres -c "DROP DATABASE IF EXISTS db_test"
         Set-Location $location
 
     }
+#====================================================================================
+#                                   MULTI
+#====================================================================================
     elseif ( $null -ne $COV_ALL )
     {
         Write-Output "GENERATE COVERAGE REPORT ON (db_test) DB FOR ALL MODULES INSIDE ADDONS FOLDER IN ($PROJECT_NAME) PROJECT"
@@ -209,10 +220,12 @@ psql -U odoo -d postgres -c "CREATE DATABASE db_test"
 echo $module;
 coverage run --source=/mnt/extra-addons/$module --data-file=cov_temp/.coverage.$module /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d db_test -i $module --test-tags '/$module' -p 8001 --stop-after-init --log-level=test;
 coverage report --data-file=cov_temp/.coverage.$module;
+"@ | docker exec -i -u root cov_test sh
+            if ($null -eq $TEST_DB -or $TEST_DB -eq "") {
+"@
 coverage xml --data-file=cov_temp/.coverage.$module -o /mnt/extra-addons/$module/coverage/coverage-xml.xml;
 coverage report --data-file=cov_temp/.coverage.$module > /mnt/extra-addons/$module/coverage/coverage.txt;
-"@ | docker exec -i -u root cov_test sh
-            if (!$ONLY_REPORT) {
+@"| docker exec -i -u root cov_test sh
                 Set-Location $PROJECT_FULLPATH; docker cp cov_test:/mnt/extra-addons/$module/coverage/ ${PROJECT_FULLPATH}/addons/$module
             }
         }
@@ -234,6 +247,7 @@ psql -U odoo -d postgres -c "DROP DATABASE IF EXISTS db_test"
     {
         Write-Output "You need to specify module to run coverage py with or use -all tag."
         Write-Output "Try -m module_name or -all"
+        Write-Output "You can also use --report flag to only show report without downloading it."
         display_help
     }
 }
@@ -418,7 +432,7 @@ function display_help {
     Write-Output "-m, -module                   (N)  Module to test"
     Write-Output "    -tags                     (N)  Tags to test"
     Write-Output "    -all                      (N)  Modyfie coverage funtion to run on all modules"
-    Write-Output "-r  -report                   (N)  Modyfie coverage funtion to only show coverage report"
+    Write-Output "    -report                   (N)  Modyfie coverage funtion to only show coverage report"
     Write-Output "    -database                 (N)  Database to test on"
 
     # echo some stuff here for the -a or --add-options
