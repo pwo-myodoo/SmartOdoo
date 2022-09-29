@@ -105,47 +105,48 @@ run_unit_tests(){
         display_help
     fi
 }
-        # coverage run --source=/mnt/extra-addons/$TEST_MODULE --data-file=.coverage_temp /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d $TEST_DB --test-enable -i $TEST_MODULE --stop-after-init --log-level=test;
-        # coverage report --data-file=.coverage_temp;
-        # coverage xml --data-file=.coverage_temp -o /mnt/extra-addons/$TEST_MODULE/coverage/coverage-xml.xml;
-        # coverage report --data-file=.coverage_temp > /mnt/extra-addons/$TEST_MODULE/coverage/coverage.txt;
-run_unit_tests_with_coverage(){
-    # if [ -z TEST_DB ] || [ "$TEST_DB" == "" ]; then
-    #     echo "You need to specify database to run tests on. Use --db."
-    #     display_help
-    # fi
 
+run_unit_tests_with_coverage(){
 #====================================================================================
 #                                   MULTI
 #====================================================================================
 
-    if [ -v TEST_TAGS ] && [ ! -z COV_ALL ]; then
+    if [ -v COV_ALL ]; then
         LIST_OF_ALL_MODULES=""
         cd $PROJECT_FULLPATH/addons;for d in */; do
             if [ -e $d/__init__.py ]; then
-                LIST_OF_ALL_MODULES+="${d%/},"
+                LIST_OF_ALL_MODULES+="${d%/} "
             fi
         done
-        echo ${LIST_OF_ALL_MODULES:0:-1}
-        echo "START COVERAGE REPORT ON ($TEST_DB) DB FOR ($TEST_TAGS) TAGS"
+        echo "GENERATE COVERAGE REPORT ON (db_test) DB FOR ALL MODULES INSIDE ADDONS FOLDER IN ($PROJECT_NAME) PROJECT"
         (cd $PROJECT_FULLPATH; docker-compose stop web)
         docker exec -i -u root $PROJECT_NAME-db sh <<-EOF
         psql -U odoo -d postgres -c "DROP DATABASE IF EXISTS db_test"
         psql -U odoo -d postgres -c "CREATE DATABASE db_test"
 EOF
-# --db_user=odoo --db_host=db --db_password=odoo
-        # odoo --db_user=odoo --db_host=db --db_password=odoo --addons-path=/mnt/extra-addons -i all -d db_test --stop-after-init;
-        # /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf --stop-after-init -d db_test -i $TEST_MODULE;
-        # odoo --db_user=odoo --db_host=db --db_password=odoo --addons-path=/mnt/extra-addons -u all -i ${LIST_OF_ALL_MODULES:0:-1} -d db_test --stop-after-init -c /etc/odoo/odoo.conf;
         (cd $PROJECT_FULLPATH; docker-compose run -d --name="cov_test" --rm web)
-        docker exec -i -u root cov_test sh <<-EOF
-        ./entrypoint.sh;
-        coverage run --source=/mnt/extra-addons --data-file=.coverage_temp /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d db_test -i ${LIST_OF_ALL_MODULES:0:-1} --test-tags /${LIST_OF_ALL_MODULES:0:-1} -p 8001 --stop-after-init --log-level=test;
-        coverage report --data-file=.coverage_temp;
+        for module in ${LIST_OF_ALL_MODULES}; do
+            echo ${module}
+            docker exec -i -u root cov_test sh <<-EOF
+            ./entrypoint.sh;
+            coverage run --source=/mnt/extra-addons/${module} --data-file=cov_temp/.coverage.${module} /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d db_test -i ${module} --test-tags '/${module}' -p 8001 --stop-after-init --log-level=test;
+            coverage report --data-file=cov_temp/.coverage.${module};
 EOF
-        # coverage run --source=/mnt/extra-addons --data-file=.coverage_temp /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d db_test -i $TEST_MODULE --test-tags '/$TEST_MODULE' -p 8001 --stop-after-init --log-level=test;
+            if [ -z REPORT ] || [ "$REPORT" == "" ]; then 
+                echo "$REPORT" == ""
+                echo $REPORT
+                docker exec -i -u root cov_test sh <<-EOF
+                coverage xml --data-file=cov_temp/.coverage.${module} -o /mnt/extra-addons/${module}/coverage/coverage-xml.xml;
+                coverage report --data-file=cov_temp/.coverage.${module} > /mnt/extra-addons/${module}/coverage/coverage.txt;
+EOF
+                (cd $PROJECT_FULLPATH; docker cp cov_test:/mnt/extra-addons/${module}/coverage/ ${PROJECT_FULLPATH}/addons/${module})
+            fi
+        done
 
-        # (cd $PROJECT_FULLPATH; docker cp cov_test:/mnt/extra-addons/$TEST_MODULE/coverage/ ${PROJECT_FULLPATH}/addons/$TEST_MODULE)
+        docker exec -i -u root cov_test sh <<-EOF
+        coverage combine cov_temp/;
+        coverage report;
+EOF
         (cd $PROJECT_FULLPATH; docker stop cov_test)
         (cd $PROJECT_FULLPATH; docker rm cov_test)
         docker exec -i -u root $PROJECT_NAME-db sh <<-EOF
@@ -158,30 +159,25 @@ EOF
 #====================================================================================
 
     elif [ -v TEST_MODULE ]; then
-        echo "START COVERAGE REPORT ON ($TEST_DB) DB FOR ($TEST_MODULE) MODULE"
+        echo "GENERATE COVERAGE REPORT ON (db_test) DB FOR ($TEST_MODULE) MODULE"
         (cd $PROJECT_FULLPATH; docker-compose stop web)
         docker exec -i -u root $PROJECT_NAME-db sh <<-EOF
         psql -U odoo -d postgres -c "DROP DATABASE IF EXISTS db_test"
         psql -U odoo -d postgres -c "CREATE DATABASE db_test"
 EOF
         (cd $PROJECT_FULLPATH; docker-compose run -d --name="cov_test" --rm web)
-        # coverage run --source=/mnt/extra-addons --data-file=.coverage_temp /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d $TEST_DB --test-enable --test-tags=$TEST_TAGS --stop-after-init --log-level=test;
-
         docker exec -i -u root cov_test sh <<-EOF
         ./entrypoint.sh;
         coverage run --source=/mnt/extra-addons/$TEST_MODULE --data-file=.coverage_temp /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d db_test -i $TEST_MODULE --test-tags '/$TEST_MODULE' -p 8001 --stop-after-init --log-level=test;
         coverage report --data-file=.coverage_temp;
 EOF
-        if [ -v REPORT ]; then
-        docker exec -i -u root cov_test sh <<-EOF
-        coverage xml --data-file=.coverage_temp -o /mnt/extra-addons/$TEST_MODULE/coverage/coverage-xml.xml;
-        coverage report --data-file=.coverage_temp > /mnt/extra-addons/$TEST_MODULE/coverage/coverage.txt;
+        if [ -z REPORT ] || [ "$REPORT" == "" ];  then
+            docker exec -i -u root cov_test sh <<-EOF
+            coverage xml --data-file=.coverage_temp -o /mnt/extra-addons/$TEST_MODULE/coverage/coverage-xml.xml;
+            coverage report --data-file=.coverage_temp > /mnt/extra-addons/$TEST_MODULE/coverage/coverage.txt;
 EOF
+            (cd $PROJECT_FULLPATH; docker cp cov_test:/mnt/extra-addons/${TEST_MODULE}/coverage/ ${PROJECT_FULLPATH}/addons/${TEST_MODULE})
         fi
-        # coverage report --data-file=.coverage_temp;
-        # coverage xml --data-file=.coverage_temp -o /mnt/extra-addons/coverage-all/coverage-xml.xml;
-        # (cd $PROJECT_FULLPATH;docker cp cov_test:/mnt/extra-addons/coverage-all  ${PROJECT_FULLPATH}/addons)
-        (cd $PROJECT_FULLPATH; docker cp cov_test:/mnt/extra-addons/$TEST_TAGS/coverage/ ${PROJECT_FULLPATH}/addons/$TEST_TAGS)
         (cd $PROJECT_FULLPATH; docker stop cov_test)
         (cd $PROJECT_FULLPATH; docker rm cov_test)
         docker exec -i -u root $PROJECT_NAME-db sh <<-EOF
@@ -189,7 +185,9 @@ EOF
 EOF
         (cd $PROJECT_FULLPATH; docker-compose restart)
     else
-        echo "You need to specify module and all, or module. Use -m or --all."
+        echo "You need to specify module -m module_name to run coverage py with or use --all tag."
+        echo "Try -m module_name or --all"
+        echo "You can also use --report flag to only show report without downloading it."
         display_help
     fi
 }
@@ -342,13 +340,13 @@ display_help() {
     echo "   -d, --delete                        Delete project if exist"
     echo "   -r, --rebuild                  (N)  Rebuild container in project with given name"
     echo "   -t, --test                          Run tests."
-    echo "   -c, --coverage                      Run tests and generate coverage report, and download report to coverage directory."
+    echo "   -c, --coverage                      Run tests with coverage py and download coverage report."
     echo "   -m, --module                   (N)  Module to test"
     echo "       --tags                     (N)  Tags to test"
     echo "       --db                       (N)  Database to test on"
     echo "       --all                      (N)  Coverage report for all custom modules"
     echo "       --install                  (N)  Rebuild web container and install given module"
-    echo "       --report                   (N)  Modyfie coverage function to only show report."
+    echo "       --report                   (N)  Modyfie coverage funtion to only show coverage report"
 
     echo
     # echo some stuff here for the -a or --add-options
