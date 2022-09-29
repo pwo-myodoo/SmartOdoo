@@ -197,23 +197,23 @@ psql -U odoo -d postgres -c "CREATE DATABASE db_test"
 "@ | docker exec -i -u root $PROJECT_NAME-db sh
         Set-Location $PROJECT_FULLPATH; docker-compose run -d --name="cov_test" --rm web
         $PROJECT_FULLPATH_ADDONS = $PROJECT_FULLPATH + '\addons'
-        Set-Location $PROJECT_FULLPATH_ADDONS; $xd = Get-ChildItem -Directory -Name | Where-Object {$_ | Get-ChildItem -File -Filter "__init__*"}
+        Set-Location $PROJECT_FULLPATH_ADDONS; $LIST_OF_ALL_MODULES = Get-ChildItem -Directory -Name | Where-Object {$_ | Get-ChildItem -File -Filter "__init__*"}
 
 @"
 ./entrypoint.sh;
 "@ | docker exec -i -u root cov_test bin/bash
 
-        foreach ($obj in $xd)
+        foreach ($module in $LIST_OF_ALL_MODULES)
         {
 @"
-echo $obj;
-coverage run --source=/mnt/extra-addons/$obj --data-file=cov_temp/.coverage.$obj /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d db_test -i $obj --test-tags '/$obj' -p 8001 --stop-after-init --log-level=test;
-coverage report --data-file=cov_temp/.coverage.$obj;
-coverage xml --data-file=cov_temp/.coverage.$obj -o /mnt/extra-addons/$obj/coverage/coverage-xml.xml;
-coverage report --data-file=cov_temp/.coverage.$obj > /mnt/extra-addons/$obj/coverage/coverage.txt;
+echo $module;
+coverage run --source=/mnt/extra-addons/$module --data-file=cov_temp/.coverage.$module /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d db_test -i $module --test-tags '/$module' -p 8001 --stop-after-init --log-level=test;
+coverage report --data-file=cov_temp/.coverage.$module;
+coverage xml --data-file=cov_temp/.coverage.$module -o /mnt/extra-addons/$module/coverage/coverage-xml.xml;
+coverage report --data-file=cov_temp/.coverage.$module > /mnt/extra-addons/$module/coverage/coverage.txt;
 "@ | docker exec -i -u root cov_test sh
             if (!$ONLY_REPORT) {
-                Set-Location $PROJECT_FULLPATH; docker cp cov_test:/mnt/extra-addons/$obj/coverage/ ${PROJECT_FULLPATH}/addons/$obj
+                Set-Location $PROJECT_FULLPATH; docker cp cov_test:/mnt/extra-addons/$module/coverage/ ${PROJECT_FULLPATH}/addons/$module
             }
         }
 @"
