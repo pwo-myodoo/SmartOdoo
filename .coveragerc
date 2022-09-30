@@ -31,5 +31,6 @@
     @(abc\.)?abstractmethod
 
  omit = **/tests/*,**/__*.py
+ show_missing = True
 [html]
  show_contexts = True
