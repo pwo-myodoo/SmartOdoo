@@ -431,8 +431,8 @@ function display_help {
 	Write-Output "-c, -coverage                      Run tests with coverage py and download coverage report."
     Write-Output "-m, -module                   (N)  Module to test"
     Write-Output "    -tags                     (N)  Tags to test"
-    Write-Output "    -all                      (N)  Modyfie coverage funtion to run on all modules"
-    Write-Output "    -report                   (N)  Modyfie coverage funtion to only show coverage report"
+    Write-Output "    -all                      (N)  Modyfies coverage funtion to run on all modules"
+    Write-Output "    -report                   (N)  Modyfies coverage funtion to only show coverage report"
     Write-Output "    -database                 (N)  Database to test on"
 
     # echo some stuff here for the -a or --add-options

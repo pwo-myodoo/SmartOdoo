@@ -113,28 +113,49 @@ run_unit_tests_with_coverage(){
 
     if [ -v COV_ALL ]; then
         LIST_OF_ALL_MODULES=""
-        cd $PROJECT_FULLPATH/addons;for d in */; do
-            if [ -e $d/__init__.py ]; then
-                LIST_OF_ALL_MODULES+="${d%/} "
-            fi
-        done
+        if [ -z EXCLUDE ] || [ "$EXCLUDE" == "" ]; then 
+            cd $PROJECT_FULLPATH/addons;for d in */; do
+                if [ -e $d/__init__.py ]; then
+                    LIST_OF_ALL_MODULES+="${d%/} "
+                fi
+            done
+        else 
+            cd $PROJECT_FULLPATH/addons;for d in */; do
+                temp=${d%/}
+                if [ -e $d/__init__.py ] && [ ! -z "${EXCLUDE##*$temp*}" ]; then
+                    LIST_OF_ALL_MODULES+="${d%/} "
+                fi
+            done
+        fi
         echo "GENERATE COVERAGE REPORT ON (db_test) DB FOR ALL MODULES INSIDE ADDONS FOLDER IN ($PROJECT_NAME) PROJECT"
-        (cd $PROJECT_FULLPATH; docker-compose stop web)
-        docker exec -i -u root $PROJECT_NAME-db sh <<-EOF
-        psql -U odoo -d postgres -c "DROP DATABASE IF EXISTS db_test"
-        psql -U odoo -d postgres -c "CREATE DATABASE db_test"
+        if [ -z FULL ] || [ "$FULL" == "" ]; then 
+            echo "====================FAST RUN===================="
+            echo "====================PREPARE TEST DATABASE FOR COVERAGE RUN===================="
+            docker exec -i -u root $PROJECT_NAME-db sh <<-EOF
+            psql -U odoo -d postgres -c "DROP DATABASE IF EXISTS db_test"
+            psql -U odoo -d postgres -c "CREATE DATABASE db_test"
 EOF
+        fi
+        (cd $PROJECT_FULLPATH; docker-compose stop web)
         (cd $PROJECT_FULLPATH; docker-compose run -d --name="cov_test" --rm web)
         for module in ${LIST_OF_ALL_MODULES}; do
             echo ${module}
+            if [ -v FULL ] || [ "$FULL" != "" ]; then 
+                echo "====================PREPARE TEST DATABASE FOR COVERAGE RUN===================="
+                echo "====================FULL RUN===================="
+                docker exec -i -u root $PROJECT_NAME-db sh <<-EOF
+                psql -U odoo -d postgres -c "DROP DATABASE IF EXISTS db_test"
+                psql -U odoo -d postgres -c "CREATE DATABASE db_test"
+EOF
+            fi
+            echo "====================START COVERAGE RUN===================="
             docker exec -i -u root cov_test sh <<-EOF
             ./entrypoint.sh;
-            coverage run --source=/mnt/extra-addons/${module} --data-file=cov_temp/.coverage.${module} /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d db_test -i ${module} --test-tags '/${module}' -p 8001 --stop-after-init --log-level=test;
+            coverage run --source=/mnt/extra-addons/${module} --data-file=cov_temp/.coverage.${module} /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d db_test -i ${module} --test-tags '/${module}' -p 8001 --stop-after-init --log-level=test --without-demo all;
             coverage report --data-file=cov_temp/.coverage.${module};
 EOF
             if [ -z REPORT ] || [ "$REPORT" == "" ]; then 
-                echo "$REPORT" == ""
-                echo $REPORT
+                echo "====================DOWNLOAD COVERAGE REPORT===================="
                 docker exec -i -u root cov_test sh <<-EOF
                 coverage xml --data-file=cov_temp/.coverage.${module} -o /mnt/extra-addons/${module}/coverage/coverage-xml.xml;
                 coverage report --data-file=cov_temp/.coverage.${module} > /mnt/extra-addons/${module}/coverage/coverage.txt;
@@ -168,7 +189,7 @@ EOF
         (cd $PROJECT_FULLPATH; docker-compose run -d --name="cov_test" --rm web)
         docker exec -i -u root cov_test sh <<-EOF
         ./entrypoint.sh;
-        coverage run --source=/mnt/extra-addons/$TEST_MODULE --data-file=.coverage_temp /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d db_test -i $TEST_MODULE --test-tags '/$TEST_MODULE' -p 8001 --stop-after-init --log-level=test;
+        coverage run --source=/mnt/extra-addons/$TEST_MODULE --data-file=.coverage_temp /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d db_test -i $TEST_MODULE --test-tags '/$TEST_MODULE' -p 8001 --stop-after-init --log-level=test --without-demo all;
         coverage report --data-file=.coverage_temp;
 EOF
         if [ -z REPORT ] || [ "$REPORT" == "" ];  then
@@ -346,7 +367,9 @@ display_help() {
     echo "       --db                       (N)  Database to test on"
     echo "       --all                      (N)  Coverage report for all custom modules"
     echo "       --install                  (N)  Rebuild web container and install given module"
-    echo "       --report                   (N)  Modyfie coverage funtion to only show coverage report"
+    echo "       --report                        Modyfies coverage funtion to only show coverage report"
+    echo "       --full                          Modyfies coverage funtion to drop test database before testing every module, CAUTION it drastically slow function down"
+    echo "       --exclude                  (N)  Modyfies coverage funtion to exclude given modules names (EXAMPLE 'module_1 module_2') from funtion run, REQUAIRE --all param"
 
     echo
     # echo some stuff here for the -a or --add-options
@@ -357,7 +380,7 @@ display_help() {
 # Process the input options. Add options as needed.        #
 ############################################################
 
-PARSED_ARGS=$(getopt -a -o n:o:p:a:b:m:r:edth -l name:,odoo:,psql:,addons:,branch:,module:,db:,tags:,rebuild:,install:,enterprise,delete,test,coverage,all,report,help -- "$@")
+PARSED_ARGS=$(getopt -a -o n:o:p:a:b:m:r:edth -l name:,odoo:,psql:,addons:,branch:,module:,db:,tags:,rebuild:,install:,enterprise,delete,test,coverage,all,report,exclude:,full,help -- "$@")
 VALID_ARGS=$?
 if [ "$VALID_ARGS" != "0" ]; then
     display_help
@@ -409,6 +432,14 @@ while :; do
     --report)
         REPORT='R'
         shift
+        ;;
+    --full)
+        FULL='F'
+        shift
+        ;;
+    --exclude)
+        EXCLUDE="$2"
+        shift 2
         ;;
     -m | --module)
         TEST_MODULE="$2"
