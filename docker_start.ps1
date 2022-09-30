@@ -140,7 +140,7 @@ function run_unit_tests {
     {
         Write-Output "START ODOO UNIT TESTS ON ($TEST_DB) DB FOR ($TEST_MODULE) MODULE"
         # Set-Location $PROJECT_FULLPATH; docker-compose stop web
-        Set-Location $PROJECT_FULLPATH; docker-compose run --rm web --test-enable --log-level=test --stop-after-init -d $TEST_DB -i $TEST_MODULE --test-tags /$TEST_MODULE -p 8001
+        Set-Location $PROJECT_FULLPATH; docker-compose run --rm web --test-enable --log-level=test --stop-after-init -d $TEST_DB -i $TEST_MODULE --test-tags /$TEST_MODULE
         # Set-Location $PROJECT_FULLPATH; docker-compose restart
         Set-Location $location
     }

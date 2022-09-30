@@ -96,7 +96,7 @@ run_unit_tests(){
     fi
     if [ -v TEST_MODULE ]; then
         echo "START ODOO UNIT TESTS ON ($TEST_DB) DB FOR ($TEST_MODULE) MODULE"
-        (cd $PROJECT_FULLPATH; docker-compose run --rm web --test-enable --log-level=test --stop-after-init -d ${TEST_DB} -i ${TEST_MODULE})
+        (cd $PROJECT_FULLPATH; docker-compose run --rm web --test-enable --log-level=test --stop-after-init -d ${TEST_DB} -i ${TEST_MODULE} --test-tags /${TEST_MODULE})
     elif [ -v TEST_TAGS ]; then
         echo "START ODOO UNIT TESTS ON ($TEST_DB) DB FOR ($TEST_TAGS) TAGS"
         (cd $PROJECT_FULLPATH; docker-compose run --rm web --test-enable --log-level=test --stop-after-init -d ${TEST_DB} --test-tags=${TEST_TAGS})
