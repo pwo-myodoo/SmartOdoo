@@ -176,7 +176,7 @@ psql -U odoo -d postgres -c "CREATE DATABASE db_test"
 @"
 ./entrypoint.sh;
 coverage run --source=/mnt/extra-addons/$TEST_MODULE --data-file=cov_temp/.coverage.$TEST_MODULE /usr/bin/odoo --db_user=odoo --db_host=db --db_password=odoo -c /etc/odoo/odoo.conf -d db_test -i $TEST_MODULE --test-tags '/$TEST_MODULE' -p 8001 --stop-after-init --log-level=test;
-coverage report ---data-file=cov_temp/.coverage.$TEST_MODULE;
+coverage report --data-file=cov_temp/.coverage.$TEST_MODULE;
 "@ | docker exec -i -u root cov_test sh
 
         if ($null -eq $TEST_DB -or $TEST_DB -eq "") {
@@ -184,7 +184,7 @@ coverage report ---data-file=cov_temp/.coverage.$TEST_MODULE;
 coverage xml --data-file=cov_temp/.coverage.$TEST_MODULE -o /mnt/extra-addons/$TEST_MODULE/coverage/coverage-xml.xml;
 coverage report --data-file=cov_temp/.coverage.$TEST_MODULE > /mnt/extra-addons/$TEST_MODULE/coverage/coverage.txt;
 @"| docker exec -i -u root cov_test sh
-                    Set-Location $PROJECT_FULLPATH; docker cp cov_test:/mnt/extra-addons/$module/coverage/ ${PROJECT_FULLPATH}/addons/$module
+            Set-Location $PROJECT_FULLPATH; docker cp cov_test:/mnt/extra-addons/$TEST_MODULE/coverage/ ${PROJECT_FULLPATH}/addons/$TEST_MODULE
         }
         Set-Location $PROJECT_FULLPATH; docker stop cov_test
         Set-Location $PROJECT_FULLPATH; docker rm cov_test
